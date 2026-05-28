@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "safe-scan"
+version = "0.1.0"
+description = "Safely diagnose pathological cache directory fanout on macOS."
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [
+  { name = "Safe Scan contributors" }
+]
+license = { text = "MIT" }
+classifiers = [
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Operating System :: MacOS",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Topic :: System :: Filesystems",
+  "Topic :: Utilities"
+]
+
+[project.scripts]
+safescan = "safescan.cli:main"
+safe-scan = "safescan.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
