@@ -12,8 +12,10 @@ from safescan.scanner import (
     CandidateEvent,
     ErrorEvent,
     LimitEvent,
+    ProbeConfig,
     ScanConfig,
     inspect_directory,
+    probe_directory,
     scan_directories,
 )
 
@@ -152,10 +154,119 @@ class CliTests(unittest.TestCase):
 
             stdout = io.StringIO()
             with contextlib.redirect_stdout(stdout):
-                exit_code = main(["scan", tmp, "--threshold", "3", "--min-prune-depth", "1"])
+                exit_code = main(
+                    ["scan", tmp, "--threshold", "3", "--min-prune-depth", "1", "--format", "lines"]
+                )
 
         self.assertEqual(0, exit_code)
         self.assertEqual(f"CANDIDATE depth=2 entries>=3 {candidate}\n", stdout.getvalue())
+
+    def test_scan_cli_report_groups_suspicious_patterns(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            dir_cache = os.path.join(tmp, "runner", "com.apple.e5rt.e5bundlecache")
+            tiny_cache = os.path.join(tmp, "browser", "Code Cache", "js")
+            os.makedirs(dir_cache)
+            os.makedirs(tiny_cache)
+            for index in range(4):
+                os.makedirs(os.path.join(dir_cache, f"process-{index}"))
+            for index in range(30):
+                touch(os.path.join(tiny_cache, f"tiny-{index}"), size=128)
+
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "scan",
+                        tmp,
+                        "--threshold",
+                        "3",
+                        "--min-prune-depth",
+                        "1",
+                        "--sample",
+                        "100",
+                        "--dir-threshold",
+                        "3",
+                        "--probe-seconds",
+                        "1",
+                    ]
+                )
+
+            output = stdout.getvalue()
+            self.assertEqual(0, exit_code)
+            self.assertIn("Most Likely Problem Directories (2)", output)
+            self.assertIn("Problem Path List", output)
+            self.assertIn("Suggested Cleanup Commands", output)
+            self.assertIn("Directory Fanout, CoreML/E5RT-Style (1)", output)
+            self.assertIn("Tiny File Fanout (1)", output)
+            self.assertIn("runner/com.apple.e5rt.e5bundlecache  dirs=4/4", output)
+            self.assertIn("browser/Code Cache/js  tiny=30/30", output)
+            self.assertIn(dir_cache, output)
+            self.assertIn(tiny_cache, output)
+            self.assertIn(f"rm -rf -- {dir_cache}", output)
+            self.assertTrue(os.path.isdir(dir_cache))
+            self.assertTrue(os.path.isdir(tiny_cache))
+
+    def test_scan_cli_paths_format_outputs_problem_paths_only(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            dir_cache = os.path.join(tmp, "runner", "com.apple.e5rt.e5bundlecache")
+            other_cache = os.path.join(tmp, "ordinary")
+            os.makedirs(dir_cache)
+            os.makedirs(other_cache)
+            for index in range(4):
+                os.makedirs(os.path.join(dir_cache, f"process-{index}"))
+                touch(os.path.join(other_cache, f"file-{index}"), size=1024 * 1024)
+
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "scan",
+                        tmp,
+                        "--threshold",
+                        "3",
+                        "--min-prune-depth",
+                        "1",
+                        "--format",
+                        "paths",
+                        "--dir-threshold",
+                        "3",
+                        "--no-probe",
+                    ]
+                )
+
+            self.assertEqual(0, exit_code)
+            self.assertEqual(f"{dir_cache}\n", stdout.getvalue())
+            self.assertTrue(os.path.isdir(dir_cache))
+            self.assertTrue(os.path.isdir(other_cache))
+
+    def test_scan_cli_commands_format_outputs_suggested_rm_commands_only(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            dir_cache = os.path.join(tmp, "runner cache", "com.apple.e5rt.e5bundlecache")
+            os.makedirs(dir_cache)
+            for index in range(4):
+                os.makedirs(os.path.join(dir_cache, f"process-{index}"))
+
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "scan",
+                        tmp,
+                        "--threshold",
+                        "3",
+                        "--min-prune-depth",
+                        "1",
+                        "--format",
+                        "commands",
+                        "--dir-threshold",
+                        "3",
+                        "--no-probe",
+                    ]
+                )
+
+            self.assertEqual(0, exit_code)
+            self.assertEqual(f"rm -rf -- '{dir_cache}'\n", stdout.getvalue())
+            self.assertTrue(os.path.isdir(dir_cache))
 
     def test_inspect_cli_reports_missing_path_on_stderr(self) -> None:
         stderr = io.StringIO()
@@ -173,6 +284,8 @@ class InspectTests(unittest.TestCase):
             inspect_directory("/tmp", sample_limit=0)
         with self.assertRaises(ValueError):
             inspect_directory("/tmp", tiny_size=-1)
+        with self.assertRaises(ValueError):
+            inspect_directory("/tmp", directory_threshold=0)
 
     def test_inspect_reports_tiny_file_cache_explosion(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -190,6 +303,17 @@ class InspectTests(unittest.TestCase):
         self.assertEqual(128, result.mean_file_size)
         self.assertEqual(128, result.median_file_size)
         self.assertTrue(result.tiny_file_cache_explosion)
+
+    def test_inspect_reports_directory_fanout_explosion(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            for index in range(4):
+                os.makedirs(os.path.join(tmp, f"process-cache-{index}"))
+
+            result = inspect_directory(tmp, sample_limit=10, directory_threshold=3)
+
+        self.assertEqual(4, result.sampled_dirs)
+        self.assertEqual(1.0, result.directory_ratio)
+        self.assertTrue(result.directory_fanout_explosion)
 
     def test_inspect_stops_at_sample_limit(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -217,6 +341,40 @@ class InspectTests(unittest.TestCase):
             result = inspect_directory("/private")
 
         self.assertEqual("PermissionError", result.error_name)
+
+
+class ProbeTests(unittest.TestCase):
+    def test_probe_directory_uses_bounded_depth_and_entry_limits(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            child = os.path.join(tmp, "child")
+            grandchild = os.path.join(child, "grandchild")
+            os.makedirs(grandchild)
+            for index in range(5):
+                touch(os.path.join(child, f"tiny-{index}"), size=128)
+
+            result = probe_directory(
+                tmp,
+                ProbeConfig(max_seconds=1, max_depth=1, max_dirs=10, entry_limit=3, child_limit=10),
+            )
+
+        self.assertEqual(2, result.visited_dirs)
+        self.assertEqual(1, result.max_depth_reached)
+        self.assertEqual(1, result.entry_limit_hits)
+        self.assertEqual(3, result.max_entries_seen)
+
+    def test_probe_directory_rejects_invalid_config(self) -> None:
+        invalid_configs = [
+            {"max_seconds": 0},
+            {"max_depth": -1},
+            {"max_dirs": 0},
+            {"entry_limit": 0},
+            {"child_limit": 0},
+        ]
+
+        for kwargs in invalid_configs:
+            with self.subTest(kwargs=kwargs):
+                with self.assertRaises(ValueError):
+                    ProbeConfig(**kwargs)
 
 
 if __name__ == "__main__":

@@ -6,7 +6,9 @@ pathological cache directory fanout on macOS. The primary command is `safescan`;
 
 ## Core Rules
 
-- Do not add deletion, cleanup, or mutation behavior unless explicitly requested.
+- Safe Scan must not delete, clean, or mutate filesystem contents.
+- Cleanup guidance may be emitted only as suggested shell commands for human
+  review, such as `rm -rf -- <quoted-path>`.
 - Use `os.scandir()` for directory enumeration. Avoid recursive helpers such as
   `Path.rglob()`, `os.walk()`, `find`, or `du` for scanner behavior.
 - Keep traversal bounded. Preserve max-depth and max-directory safeguards.
@@ -34,8 +36,8 @@ properties.
 - Prefer temporary synthetic directory trees over real cache directories.
 - Keep fixtures small and deterministic.
 - Cover pruning behavior, `--min-prune-depth`, max-depth/max-dir limits,
-  symlink handling, permission/error paths, inspect statistics, and CLI output
-  when those areas change.
+  symlink handling, permission/error paths, inspect statistics, CLI output, and
+  CoreML/E5RT-style directory fanout when those areas change.
 - Do not weaken tests just to match changed behavior; update expectations only
   when the behavior change is intentional.
 
