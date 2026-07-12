@@ -38,10 +38,24 @@ pipx uninstall cache-canary
 
 ## Quick start
 
-Scan the standard macOS cache directory:
+Start with the built-in examples and safety summary:
+
+```bash
+cache-canary
+```
+
+Scan the standard macOS cache directory (`~/Library/Caches`):
 
 ```bash
 cache-canary scan
+```
+
+Scan the current user's macOS temporary directory (normally under
+`/var/folders`), or scan both standard locations:
+
+```bash
+cache-canary scan --temp
+cache-canary scan --all
 ```
 
 Scan a different directory:
@@ -52,6 +66,12 @@ cache-canary scan /path/to/directory
 
 Cache Canary only diagnoses and reports. It never deletes files or runs its
 suggested cleanup commands.
+
+For every scan option and additional examples:
+
+```bash
+cache-canary scan --help
+```
 
 ## Install for development
 

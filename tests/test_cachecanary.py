@@ -148,7 +148,62 @@ class CliTests(unittest.TestCase):
     def test_scan_cli_defaults_to_user_cache_directory(self) -> None:
         args = build_parser().parse_args(["scan"])
 
-        self.assertEqual("~/Library/Caches", args.root)
+        self.assertIsNone(args.root)
+
+    def test_bare_cli_prints_new_user_help(self) -> None:
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            exit_code = main([])
+
+        self.assertEqual(0, exit_code)
+        self.assertIn("cache-canary scan --temp", stdout.getvalue())
+        self.assertIn("never deletes files", stdout.getvalue())
+
+    def test_scan_cli_rejects_path_with_named_target(self) -> None:
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr), self.assertRaises(SystemExit) as raised:
+            build_parser().parse_args(["scan", "/tmp/example", "--temp"])
+
+        self.assertEqual(2, raised.exception.code)
+        self.assertIn("not allowed with argument", stderr.getvalue())
+
+    def test_temp_target_can_report_the_root_as_a_candidate(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            for index in range(3):
+                os.makedirs(os.path.join(tmp, f"process-{index}"))
+
+            stdout = io.StringIO()
+            with mock.patch.dict(os.environ, {"TMPDIR": tmp}), contextlib.redirect_stdout(stdout):
+                exit_code = main(["scan", "--temp", "--threshold", "3", "--format", "lines"])
+
+        self.assertEqual(0, exit_code)
+        self.assertEqual(f"CANDIDATE depth=0 entries>=3 {tmp}\n", stdout.getvalue())
+
+    def test_all_target_scans_caches_and_temporary_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = os.path.join(tmp, "home")
+            caches = os.path.join(home, "Library", "Caches")
+            cache_problem = os.path.join(caches, "problem")
+            temporary = os.path.join(tmp, "temporary")
+            os.makedirs(cache_problem)
+            os.makedirs(temporary)
+            for index in range(3):
+                os.makedirs(os.path.join(cache_problem, f"entry-{index}"))
+                os.makedirs(os.path.join(temporary, f"process-{index}"))
+
+            stdout = io.StringIO()
+            environment = {"HOME": home, "TMPDIR": temporary}
+            with mock.patch.dict(os.environ, environment), contextlib.redirect_stdout(stdout):
+                exit_code = main(["scan", "--all", "--threshold", "3", "--format", "lines"])
+
+        self.assertEqual(0, exit_code)
+        self.assertEqual(
+            (
+                f"CANDIDATE depth=1 entries>=3 {cache_problem}\n"
+                f"CANDIDATE depth=0 entries>=3 {temporary}\n"
+            ),
+            stdout.getvalue(),
+        )
 
     def test_version_flag_prints_version(self) -> None:
         stdout = io.StringIO()
