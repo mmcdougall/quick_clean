@@ -7,8 +7,8 @@ import tempfile
 import unittest
 from unittest import mock
 
-from safescan.cli import format_scan_events, main
-from safescan.scanner import (
+from cachecanary.cli import build_parser, format_scan_events, main
+from cachecanary.scanner import (
     CandidateEvent,
     ErrorEvent,
     LimitEvent,
@@ -128,7 +128,7 @@ class ScanTests(unittest.TestCase):
         self.assertEqual([], [event for event in events if isinstance(event, CandidateEvent)])
 
     def test_scan_reports_permission_error(self) -> None:
-        with mock.patch("safescan.scanner.os.scandir", side_effect=PermissionError):
+        with mock.patch("cachecanary.scanner.os.scandir", side_effect=PermissionError):
             events = list(scan_directories("/private", ScanConfig()))
 
         self.assertEqual(1, len(events))
@@ -145,6 +145,74 @@ class ScanTests(unittest.TestCase):
 
 
 class CliTests(unittest.TestCase):
+    def test_scan_cli_defaults_to_user_cache_directory(self) -> None:
+        args = build_parser().parse_args(["scan"])
+
+        self.assertIsNone(args.root)
+
+    def test_bare_cli_prints_new_user_help(self) -> None:
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            exit_code = main([])
+
+        self.assertEqual(0, exit_code)
+        self.assertIn("cache-canary scan --temp", stdout.getvalue())
+        self.assertIn("never deletes files", stdout.getvalue())
+
+    def test_scan_cli_rejects_path_with_named_target(self) -> None:
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr), self.assertRaises(SystemExit) as raised:
+            build_parser().parse_args(["scan", "/tmp/example", "--temp"])
+
+        self.assertEqual(2, raised.exception.code)
+        self.assertIn("not allowed with argument", stderr.getvalue())
+
+    def test_temp_target_can_report_the_root_as_a_candidate(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            for index in range(3):
+                os.makedirs(os.path.join(tmp, f"process-{index}"))
+
+            stdout = io.StringIO()
+            with mock.patch.dict(os.environ, {"TMPDIR": tmp}), contextlib.redirect_stdout(stdout):
+                exit_code = main(["scan", "--temp", "--threshold", "3", "--format", "lines"])
+
+        self.assertEqual(0, exit_code)
+        self.assertEqual(f"CANDIDATE depth=0 entries>=3 {tmp}\n", stdout.getvalue())
+
+    def test_all_target_scans_caches_and_temporary_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = os.path.join(tmp, "home")
+            caches = os.path.join(home, "Library", "Caches")
+            cache_problem = os.path.join(caches, "problem")
+            temporary = os.path.join(tmp, "temporary")
+            os.makedirs(cache_problem)
+            os.makedirs(temporary)
+            for index in range(3):
+                os.makedirs(os.path.join(cache_problem, f"entry-{index}"))
+                os.makedirs(os.path.join(temporary, f"process-{index}"))
+
+            stdout = io.StringIO()
+            environment = {"HOME": home, "TMPDIR": temporary}
+            with mock.patch.dict(os.environ, environment), contextlib.redirect_stdout(stdout):
+                exit_code = main(["scan", "--all", "--threshold", "3", "--format", "lines"])
+
+        self.assertEqual(0, exit_code)
+        self.assertEqual(
+            (
+                f"CANDIDATE depth=1 entries>=3 {cache_problem}\n"
+                f"CANDIDATE depth=0 entries>=3 {temporary}\n"
+            ),
+            stdout.getvalue(),
+        )
+
+    def test_version_flag_prints_version(self) -> None:
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout), self.assertRaises(SystemExit) as raised:
+            main(["--version"])
+
+        self.assertEqual(0, raised.exception.code)
+        self.assertEqual("cache-canary 0.1.0\n", stdout.getvalue())
+
     def test_scan_cli_prints_candidate(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             candidate = os.path.join(tmp, "vendor", "cache")
@@ -272,7 +340,7 @@ class CliTests(unittest.TestCase):
         stderr = io.StringIO()
 
         with contextlib.redirect_stderr(stderr):
-            exit_code = main(["inspect", "/definitely/missing/safescan/path"])
+            exit_code = main(["inspect", "/definitely/missing/cachecanary/path"])
 
         self.assertEqual(1, exit_code)
         self.assertIn("ERROR     FileNotFoundError", stderr.getvalue())
@@ -337,7 +405,7 @@ class InspectTests(unittest.TestCase):
         self.assertEqual("Symlink", result.error_name)
 
     def test_inspect_reports_permission_error(self) -> None:
-        with mock.patch("safescan.scanner.os.scandir", side_effect=PermissionError):
+        with mock.patch("cachecanary.scanner.os.scandir", side_effect=PermissionError):
             result = inspect_directory("/private")
 
         self.assertEqual("PermissionError", result.error_name)

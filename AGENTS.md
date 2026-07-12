@@ -1,12 +1,12 @@
 # Agent Notes
 
-This repository contains Safe Scan, a diagnostic-only Python CLI for finding
-pathological cache directory fanout on macOS. The primary command is `safescan`;
-`safe-scan` is also provided as a readable alias.
+This repository contains Cache Canary, a diagnostic-only Python CLI for finding
+pathological cache directory fanout on macOS. The primary command is
+`cache-canary`; `cachecanary` is also provided as a compact alias.
 
 ## Core Rules
 
-- Safe Scan must not delete, clean, or mutate filesystem contents.
+- Cache Canary must not delete, clean, or mutate filesystem contents.
 - Cleanup guidance may be emitted only as suggested shell commands for human
   review, such as `rm -rf -- <quoted-path>`.
 - Use `os.scandir()` for directory enumeration. Avoid recursive helpers such as

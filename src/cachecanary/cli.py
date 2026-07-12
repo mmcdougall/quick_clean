@@ -7,6 +7,7 @@ import sys
 from dataclasses import dataclass
 from typing import Iterable
 
+from . import __version__
 from .scanner import (
     CandidateEvent,
     DEFAULT_DIRECTORY_THRESHOLD,
@@ -39,18 +40,67 @@ class CandidateInspection:
     probe: ProbeResult | None = None
 
 
+@dataclass(frozen=True)
+class ScanTarget:
+    path: str
+    default_min_prune_depth: int
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="safescan",
+        prog="cache-canary",
         description="Diagnose pathological cache directory fanout without fully walking trees.",
+        epilog=(
+            "examples:\n"
+            "  cache-canary scan          scan ~/Library/Caches\n"
+            "  cache-canary scan --temp   scan the current user's temporary directory\n"
+            "  cache-canary scan --all    scan both standard locations\n"
+            "  cache-canary inspect PATH  inspect one candidate directory\n\n"
+            "Cache Canary never deletes files or runs suggested cleanup commands.\n"
+            "Run 'cache-canary COMMAND --help' for command-specific options."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     scan_parser = subparsers.add_parser(
         "scan",
         help="Cautiously scan a directory tree for high-fanout candidate directories.",
+        description="Cautiously scan bounded directory trees for high-fanout candidates.",
+        epilog=(
+            "examples:\n"
+            "  cache-canary scan\n"
+            "  cache-canary scan --temp\n"
+            "  cache-canary scan --all\n"
+            "  cache-canary scan /path/to/directory\n"
+            "  cache-canary scan --temp --format paths\n\n"
+            "Reports are diagnostic only. Suggested cleanup commands are never executed."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    scan_parser.add_argument("root", help="Root directory to scan, for example ~/Library/Caches.")
+    scan_target = scan_parser.add_mutually_exclusive_group()
+    scan_target.add_argument(
+        "root",
+        nargs="?",
+        help="Directory to scan. Defaults to the user cache directory.",
+    )
+    scan_target.add_argument(
+        "--caches",
+        action="store_true",
+        help="Scan ~/Library/Caches (the default).",
+    )
+    scan_target.add_argument(
+        "--temp",
+        action="store_true",
+        help="Scan the current user's temporary directory.",
+    )
+    scan_target.add_argument(
+        "--all",
+        dest="all_targets",
+        action="store_true",
+        help="Scan both the user cache and temporary directories.",
+    )
     scan_parser.add_argument(
         "--threshold",
         type=positive_int,
@@ -60,8 +110,11 @@ def build_parser() -> argparse.ArgumentParser:
     scan_parser.add_argument(
         "--min-prune-depth",
         type=nonnegative_int,
-        default=DEFAULT_MIN_PRUNE_DEPTH,
-        help=f"Do not report or prune directories above this depth. Default: {DEFAULT_MIN_PRUNE_DEPTH}.",
+        default=None,
+        help=(
+            "Do not report or prune directories above this depth. "
+            f"Default: {DEFAULT_MIN_PRUNE_DEPTH} for caches and custom roots; 0 for --temp."
+        ),
     )
     scan_parser.add_argument(
         "--max-depth",
@@ -204,18 +257,44 @@ def normalize_path(path: str) -> str:
 
 
 def run_scan(args: argparse.Namespace) -> int:
-    root = normalize_path(args.root)
+    targets = _scan_targets(args)
+    for index, target in enumerate(targets):
+        if index and args.format == "report":
+            print()
+        for line in _scan_target(args, target):
+            print(line)
+    return 0
+
+
+def _scan_targets(args: argparse.Namespace) -> list[ScanTarget]:
+    caches = ScanTarget(normalize_path("~/Library/Caches"), DEFAULT_MIN_PRUNE_DEPTH)
+    temporary = ScanTarget(normalize_path(os.environ.get("TMPDIR") or "/tmp"), 0)
+    if args.temp:
+        return [temporary]
+    if args.all_targets:
+        if caches.path == temporary.path:
+            return [caches]
+        return [caches, temporary]
+    if args.root is not None:
+        return [ScanTarget(normalize_path(args.root), DEFAULT_MIN_PRUNE_DEPTH)]
+    return [caches]
+
+
+def _scan_target(args: argparse.Namespace, target: ScanTarget) -> Iterable[str]:
+    min_prune_depth = (
+        target.default_min_prune_depth if args.min_prune_depth is None else args.min_prune_depth
+    )
     config = ScanConfig(
         threshold=args.threshold,
-        min_prune_depth=args.min_prune_depth,
+        min_prune_depth=min_prune_depth,
         max_depth=args.max_depth,
         max_dirs=args.max_dirs,
     )
-    events = list(scan_directories(root, config))
+    events = list(scan_directories(target.path, config))
     if args.format == "lines":
-        lines = format_scan_events(events)
+        return format_scan_events(events)
     elif args.format == "paths":
-        lines = format_problem_paths(
+        return format_problem_paths(
             events=events,
             sample_limit=args.sample,
             tiny_size=args.tiny_size,
@@ -223,27 +302,23 @@ def run_scan(args: argparse.Namespace) -> int:
             probe_config=_probe_config_from_args(args),
         )
     elif args.format == "commands":
-        lines = format_cleanup_commands(
+        return format_cleanup_commands(
             events=events,
             sample_limit=args.sample,
             tiny_size=args.tiny_size,
             directory_threshold=args.dir_threshold,
             probe_config=_probe_config_from_args(args),
         )
-    else:
-        lines = format_scan_report(
-            root=root,
-            config=config,
-            events=events,
-            sample_limit=args.sample,
-            tiny_size=args.tiny_size,
-            directory_threshold=args.dir_threshold,
-            probe_config=_probe_config_from_args(args),
-            absolute_paths=args.absolute_paths,
-        )
-    for line in lines:
-        print(line)
-    return 0
+    return format_scan_report(
+        root=target.path,
+        config=config,
+        events=events,
+        sample_limit=args.sample,
+        tiny_size=args.tiny_size,
+        directory_threshold=args.dir_threshold,
+        probe_config=_probe_config_from_args(args),
+        absolute_paths=args.absolute_paths,
+    )
 
 
 def format_scan_events(events: Iterable[CandidateEvent | ErrorEvent | LimitEvent]) -> Iterable[str]:
@@ -329,7 +404,7 @@ def format_scan_report(
     limits.sort(key=lambda event: _display_path(root, event.path, absolute_paths))
     inspect_errors.sort(key=lambda item: _display_path(root, item.result.path, absolute_paths))
 
-    yield f"Safe Scan report: {root}"
+    yield f"Cache Canary report: {root}"
     yield (
         f"threshold>={config.threshold} min-depth={config.min_prune_depth} "
         f"max-depth={config.max_depth} max-dirs={config.max_dirs} sample={sample_limit}"
@@ -467,12 +542,12 @@ def _format_problem_path_list(items: list[CandidateInspection]) -> Iterable[str]
 
 
 def _format_cleanup_command_section(items: list[CandidateInspection]) -> Iterable[str]:
-    yield "Suggested Cleanup Commands (not executed by Safe Scan)"
+    yield "Suggested Cleanup Commands (not executed by Cache Canary)"
     problem_items = _problem_items(items)
     if not problem_items:
         yield "none"
         return
-    yield "# Review carefully before running. Safe Scan only prints these commands."
+    yield "# Review carefully before running. Cache Canary only prints these commands."
     for item in problem_items:
         yield _cleanup_command(item.result.path)
 
@@ -652,5 +727,9 @@ def yes_no(value: bool) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
-    args = parser.parse_args(argv)
+    arguments = sys.argv[1:] if argv is None else argv
+    if not arguments:
+        parser.print_help()
+        return 0
+    args = parser.parse_args(arguments)
     return args.func(args)
