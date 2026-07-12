@@ -171,3 +171,8 @@ cache-canary scan ~/Library/Caches --format paths > /tmp/cache-canary-problem-pa
 ```bash
 PYTHONPATH=src python -m unittest
 ```
+
+## License
+
+Cache Canary is released under the zero-condition BSD (`0BSD`) license. You
+may use, copy, modify, and distribute it for any purpose, with or without fee.
