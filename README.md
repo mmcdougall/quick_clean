@@ -1,6 +1,6 @@
-# Safe Scan
+# Cache Canary
 
-Safe Scan is a small diagnostic CLI for finding pathological cache
+Cache Canary is a small diagnostic CLI for finding pathological cache
 directories on macOS, especially under `~/Library/Caches`.
 
 It is designed for the failure mode where a cache is not merely large in bytes,
@@ -8,12 +8,12 @@ but has huge fanout: hundreds of thousands or millions of tiny files or
 subdirectories. In that shape, normal cleanup tools can hang because they try to
 fully enumerate or stat the tree.
 
-Safe Scan does not delete anything. When cleanup looks warranted, it can print
+Cache Canary does not delete anything. When cleanup looks warranted, it can print
 suggested `rm -rf` commands for human review and manual execution outside the
 tool.
 
-The primary command is `safescan`. The install also exposes `safe-scan` as an
-alias if you prefer the hyphenated form.
+The primary command is `cache-canary`. The install also exposes `cachecanary`
+as a compact alias.
 
 ## Install for development
 
@@ -26,7 +26,7 @@ python -m pip install -e .
 ## Scan
 
 ```bash
-safescan scan ~/Library/Caches
+cache-canary scan ~/Library/Caches
 ```
 
 The scan command walks depth-first. For each directory it counts only immediate
@@ -44,7 +44,7 @@ walk.
 Example report:
 
 ```text
-Safe Scan report: /Users/example/Library/Caches
+Cache Canary report: /Users/example/Library/Caches
 threshold>=1000 min-depth=1 max-depth=25 max-dirs=100000 sample=10000
 candidates=4 errors=1 limits=0
 
@@ -58,8 +58,8 @@ Problem Path List (absolute; suitable for review or scripting)
 /Users/example/Library/Caches/training-runner/com.apple.e5rt.e5bundlecache/24G517
 /Users/example/Library/Caches/browser/Default/Code Cache/js
 
-Suggested Cleanup Commands (not executed by Safe Scan)
-# Review carefully before running. Safe Scan only prints these commands.
+Suggested Cleanup Commands (not executed by Cache Canary)
+# Review carefully before running. Cache Canary only prints these commands.
 rm -rf -- /Users/example/Library/Caches/training-runner/com.apple.e5rt.e5bundlecache/24G517
 rm -rf -- '/Users/example/Library/Caches/browser/Default/Code Cache/js'
 
@@ -77,7 +77,7 @@ app-web-cache/Default/Cache/Cache_Data  entries=6792 files=6791 dirs=1 tiny=48.4
 Use raw event lines when you want pipe-friendly output:
 
 ```text
-safescan scan ~/Library/Caches --format lines --threshold 40
+cache-canary scan ~/Library/Caches --format lines --threshold 40
 ```
 
 ```text
@@ -107,7 +107,7 @@ Depth starts at `0` for the root path.
 ## Inspect
 
 ```bash
-safescan inspect /path/to/candidate --sample 10000
+cache-canary inspect /path/to/candidate --sample 10000
 ```
 
 The inspect command samples immediate entries only. It reports sampled file and
@@ -146,10 +146,10 @@ at least 80% of sampled entries are directories.
 
 ## Suggested Cleanup
 
-Safe Scan cannot delete files. To produce a reviewable command list:
+Cache Canary cannot delete files. To produce a reviewable command list:
 
 ```bash
-safescan scan ~/Library/Caches --format commands > /tmp/safescan-cleanup-commands.sh
+cache-canary scan ~/Library/Caches --format commands > /tmp/cache-canary-cleanup-commands.sh
 ```
 
 Review and edit that file before running anything in it. The generated commands
@@ -163,7 +163,7 @@ rm -rf -- '/Users/example/Library/Caches/browser/Default/Code Cache/js'
 A path-only list is also available for other tooling:
 
 ```bash
-safescan scan ~/Library/Caches --format paths > /tmp/safescan-problem-paths.txt
+cache-canary scan ~/Library/Caches --format paths > /tmp/cache-canary-problem-paths.txt
 ```
 
 ## Run tests

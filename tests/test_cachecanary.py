@@ -7,8 +7,8 @@ import tempfile
 import unittest
 from unittest import mock
 
-from safescan.cli import format_scan_events, main
-from safescan.scanner import (
+from cachecanary.cli import format_scan_events, main
+from cachecanary.scanner import (
     CandidateEvent,
     ErrorEvent,
     LimitEvent,
@@ -128,7 +128,7 @@ class ScanTests(unittest.TestCase):
         self.assertEqual([], [event for event in events if isinstance(event, CandidateEvent)])
 
     def test_scan_reports_permission_error(self) -> None:
-        with mock.patch("safescan.scanner.os.scandir", side_effect=PermissionError):
+        with mock.patch("cachecanary.scanner.os.scandir", side_effect=PermissionError):
             events = list(scan_directories("/private", ScanConfig()))
 
         self.assertEqual(1, len(events))
@@ -272,7 +272,7 @@ class CliTests(unittest.TestCase):
         stderr = io.StringIO()
 
         with contextlib.redirect_stderr(stderr):
-            exit_code = main(["inspect", "/definitely/missing/safescan/path"])
+            exit_code = main(["inspect", "/definitely/missing/cachecanary/path"])
 
         self.assertEqual(1, exit_code)
         self.assertIn("ERROR     FileNotFoundError", stderr.getvalue())
@@ -337,7 +337,7 @@ class InspectTests(unittest.TestCase):
         self.assertEqual("Symlink", result.error_name)
 
     def test_inspect_reports_permission_error(self) -> None:
-        with mock.patch("safescan.scanner.os.scandir", side_effect=PermissionError):
+        with mock.patch("cachecanary.scanner.os.scandir", side_effect=PermissionError):
             result = inspect_directory("/private")
 
         self.assertEqual("PermissionError", result.error_name)

@@ -41,7 +41,7 @@ class CandidateInspection:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="safescan",
+        prog="cache-canary",
         description="Diagnose pathological cache directory fanout without fully walking trees.",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -329,7 +329,7 @@ def format_scan_report(
     limits.sort(key=lambda event: _display_path(root, event.path, absolute_paths))
     inspect_errors.sort(key=lambda item: _display_path(root, item.result.path, absolute_paths))
 
-    yield f"Safe Scan report: {root}"
+    yield f"Cache Canary report: {root}"
     yield (
         f"threshold>={config.threshold} min-depth={config.min_prune_depth} "
         f"max-depth={config.max_depth} max-dirs={config.max_dirs} sample={sample_limit}"
@@ -467,12 +467,12 @@ def _format_problem_path_list(items: list[CandidateInspection]) -> Iterable[str]
 
 
 def _format_cleanup_command_section(items: list[CandidateInspection]) -> Iterable[str]:
-    yield "Suggested Cleanup Commands (not executed by Safe Scan)"
+    yield "Suggested Cleanup Commands (not executed by Cache Canary)"
     problem_items = _problem_items(items)
     if not problem_items:
         yield "none"
         return
-    yield "# Review carefully before running. Safe Scan only prints these commands."
+    yield "# Review carefully before running. Cache Canary only prints these commands."
     for item in problem_items:
         yield _cleanup_command(item.result.path)
 

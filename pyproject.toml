@@ -3,15 +3,16 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "safe-scan"
+name = "cache-canary"
 version = "0.1.0"
-description = "Safely diagnose pathological cache directory fanout on macOS."
+description = "Find pathological macOS cache fanout without expensive full-tree traversal."
 readme = "README.md"
 requires-python = ">=3.9"
 authors = [
-  { name = "Safe Scan contributors" }
+  { name = "Cache Canary contributors" }
 ]
 license = { text = "MIT" }
+keywords = ["macos", "cache", "filesystem", "diagnostics", "fanout"]
 classifiers = [
   "Environment :: Console",
   "Intended Audience :: Developers",
@@ -22,9 +23,14 @@ classifiers = [
   "Topic :: Utilities"
 ]
 
+[project.urls]
+Homepage = "https://github.com/mmcdougall/cache-canary"
+Repository = "https://github.com/mmcdougall/cache-canary"
+Issues = "https://github.com/mmcdougall/cache-canary/issues"
+
 [project.scripts]
-safescan = "safescan.cli:main"
-safe-scan = "safescan.cli:main"
+cache-canary = "cachecanary.cli:main"
+cachecanary = "cachecanary.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
