@@ -13,7 +13,45 @@ suggested `rm -rf` commands for human review and manual execution outside the
 tool.
 
 The primary command is `cache-canary`. The install also exposes `cachecanary`
-as a compact alias.
+as a compact alias. Cache Canary requires Python 3.9 or newer and has no runtime
+dependencies.
+
+## Install
+
+Install directly from GitHub with [`pipx`](https://pipx.pypa.io/). `pipx`
+keeps command-line tools isolated without requiring you to create or activate a
+virtual environment.
+
+```bash
+brew install pipx
+pipx ensurepath
+pipx install git+https://github.com/mmcdougall/cache-canary.git
+```
+
+Open a new terminal after `pipx ensurepath` if `cache-canary` is not immediately
+found. Upgrade or remove the tool with:
+
+```bash
+pipx upgrade cache-canary
+pipx uninstall cache-canary
+```
+
+## Quick start
+
+Scan the standard macOS cache directory:
+
+```bash
+cache-canary scan
+```
+
+Scan a different directory:
+
+```bash
+cache-canary scan /path/to/directory
+```
+
+Cache Canary only diagnoses and reports. It never deletes files or runs its
+suggested cleanup commands.
 
 ## Install for development
 
@@ -26,7 +64,7 @@ python -m pip install -e .
 ## Scan
 
 ```bash
-cache-canary scan ~/Library/Caches
+cache-canary scan
 ```
 
 The scan command walks depth-first. For each directory it counts only immediate

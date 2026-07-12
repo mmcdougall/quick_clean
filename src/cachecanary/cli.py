@@ -7,6 +7,7 @@ import sys
 from dataclasses import dataclass
 from typing import Iterable
 
+from . import __version__
 from .scanner import (
     CandidateEvent,
     DEFAULT_DIRECTORY_THRESHOLD,
@@ -44,13 +45,19 @@ def build_parser() -> argparse.ArgumentParser:
         prog="cache-canary",
         description="Diagnose pathological cache directory fanout without fully walking trees.",
     )
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     scan_parser = subparsers.add_parser(
         "scan",
         help="Cautiously scan a directory tree for high-fanout candidate directories.",
     )
-    scan_parser.add_argument("root", help="Root directory to scan, for example ~/Library/Caches.")
+    scan_parser.add_argument(
+        "root",
+        nargs="?",
+        default="~/Library/Caches",
+        help="Root directory to scan. Default: ~/Library/Caches.",
+    )
     scan_parser.add_argument(
         "--threshold",
         type=positive_int,

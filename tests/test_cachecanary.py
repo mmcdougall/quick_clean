@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from unittest import mock
 
-from cachecanary.cli import format_scan_events, main
+from cachecanary.cli import build_parser, format_scan_events, main
 from cachecanary.scanner import (
     CandidateEvent,
     ErrorEvent,
@@ -145,6 +145,19 @@ class ScanTests(unittest.TestCase):
 
 
 class CliTests(unittest.TestCase):
+    def test_scan_cli_defaults_to_user_cache_directory(self) -> None:
+        args = build_parser().parse_args(["scan"])
+
+        self.assertEqual("~/Library/Caches", args.root)
+
+    def test_version_flag_prints_version(self) -> None:
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout), self.assertRaises(SystemExit) as raised:
+            main(["--version"])
+
+        self.assertEqual(0, raised.exception.code)
+        self.assertEqual("cache-canary 0.1.0\n", stdout.getvalue())
+
     def test_scan_cli_prints_candidate(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             candidate = os.path.join(tmp, "vendor", "cache")
